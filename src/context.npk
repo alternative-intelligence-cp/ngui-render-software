@@ -1,0 +1,20 @@
+pub struct:SoftwareContext = {
+    int64: buffer_ptr; // Points to the raw pixel memory
+    int64: width;
+    int64: height;
+    int64: pitch; // bytes per line
+    int64: bpp;   // bytes per pixel (usually 4)
+};
+
+// Helper to initialize a context with a given buffer.
+// This is typically called by a windowing backend (e.g. ngui-window-fbdev)
+// after it has memory-mapped or allocated the physical framebuffer.
+pub func:software_context_init = SoftwareContext(int64: buffer_ptr, int64: width, int64: height, int64: pitch, int64: bpp) {
+    pass(SoftwareContext{
+        buffer_ptr: buffer_ptr,
+        width: width,
+        height: height,
+        pitch: pitch,
+        bpp: bpp
+    });
+};

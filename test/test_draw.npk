@@ -1,0 +1,61 @@
+use "../src/context.npk".*;
+use "../src/draw.npk".*;
+
+pub func:failsafe = int32(tbb32:err) { drop err;
+    exit 1i32;
+};
+
+// Helper to check pixel color
+func:get_pixel = uint32(SoftwareContext->:ctx, int64: x, int64: y) {
+    int64: offset = (y * ctx->pitch) + (x * ctx->bpp);
+    int64: word_idx = offset / 8i64;
+    int32: shift = cast_unchecked<int32>(offset & 7i64) * 8i32;
+
+    int64: word = (cast_unchecked<int64-> >(ctx->buffer_ptr))[word_idx];
+    
+    int64: masked = (word >> cast_unchecked<int64>(shift)) & 4294967295i64;
+    pass cast_unchecked<uint32>(masked);
+};
+
+pub func:main = int32() {
+    int64: width = 100i64;
+    int64: height = 100i64;
+    int64: bpp = 4i64;
+    int64: pitch = width * bpp;
+    int64: size = pitch * height;
+
+    wild int8->: buf_raw = calloc(1i64, size);
+    defer { drop dalloc(buf_raw); }
+    if (cast_unchecked<int64>(buf_raw) == 0i64) {
+        exit 1i32;
+    }
+
+    SoftwareContext:ctx = raw software_context_init(cast_unchecked<int64>(buf_raw), width, height, pitch, bpp);
+
+    // 1. Clear to black (0)
+    drop software_clear(@ctx);
+    
+    // Verify background is black
+    uint32: bg_color = raw get_pixel(@ctx, 0i64, 0i64);
+    if (bg_color != 0u32) {
+        exit 2i32;
+    }
+
+    // 2. Draw a red rectangle at (10, 10) size 10x10
+    uint32: red = 4278190335u32; // 0xFF0000FF
+    drop software_draw_rect(@ctx, 10i32, 10i32, 10i32, 10i32, red);
+
+    // Verify inside the rectangle is red
+    uint32: inside_color = raw get_pixel(@ctx, 15i64, 15i64);
+    if (inside_color != red) {
+        exit cast_unchecked<int32>(inside_color & 255u32);
+    }
+
+    // Verify outside the rectangle is still black
+    uint32: outside_color = raw get_pixel(@ctx, 5i64, 5i64);
+    if (outside_color != 0u32) {
+        exit 4i32;
+    }
+
+    exit 0i32;
+};

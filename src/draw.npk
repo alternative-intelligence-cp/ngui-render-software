@@ -1,0 +1,115 @@
+use "context.npk".*;
+
+// Helper to write a 32-bit color to a specific x, y
+pub func:put_pixel = NIL(SoftwareContext->:ctx, int64: x, int64: y, uint32: color) {
+    if (x < 0i64) { pass NIL; }
+    if (y < 0i64) { pass NIL; }
+    if (x >= ctx->width) { pass NIL; }
+    if (y >= ctx->height) { pass NIL; }
+
+    int64: offset = (y * ctx->pitch) + (x * ctx->bpp);
+    
+    // Write 32-bit color using int64-> bit masking (int32-> non-zero indices are broken in v0.40.x)
+    int64: word_idx = offset / 8i64;
+    int32: shift = cast_unchecked<int32>(offset & 7i64) * 8i32;
+
+    wild int64->: buf64 = cast_unchecked<int64-> >(ctx->buffer_ptr);
+    int64: word = buf64[word_idx];
+    
+    // Clear the 32 bits
+    word = word & ~(4294967295i64 << cast_unchecked<int64>(shift));
+    // Set the 32 bits
+    word = word | (cast_unchecked<int64>(color) << cast_unchecked<int64>(shift));
+    
+    (cast_unchecked<int64-> >(ctx->buffer_ptr))[word_idx] = word;
+    pass NIL;
+};
+
+pub func:software_clear = NIL(SoftwareContext->:ctx) {
+    int64: total_words = (ctx->pitch * ctx->height) / 8i64;
+    int64: i = 0i64;
+    while (i < total_words) {
+        (cast_unchecked<int64-> >(ctx->buffer_ptr))[i] = 0i64;
+        i = i + 1i64;
+    }
+    pass NIL;
+};
+
+pub func:software_draw_rect = NIL(SoftwareContext->:ctx, int32: x, int32: y, int32: width, int32: height, uint32: color) {
+    int64: x64 = cast_unchecked<int64>(x);
+    int64: y64 = cast_unchecked<int64>(y);
+    int64: w64 = cast_unchecked<int64>(width);
+    int64: h64 = cast_unchecked<int64>(height);
+    
+    int64: cy = y64;
+    while (cy < (y64 + h64)) {
+        int64: cx = x64;
+        while (cx < (x64 + w64)) {
+            drop put_pixel(ctx, cx, cy, color);
+            cx = cx + 1i64;
+        }
+        cy = cy + 1i64;
+    }
+    pass NIL;
+};
+
+pub func:software_draw_shadow = NIL(SoftwareContext->:ctx, int32: x, int32: y, int32: width, int32: height, int32: blur, uint32: color) {
+    int64: x64 = cast_unchecked<int64>(x);
+    int64: y64 = cast_unchecked<int64>(y);
+    int64: w64 = cast_unchecked<int64>(width);
+    int64: h64 = cast_unchecked<int64>(height);
+    int64: b64 = cast_unchecked<int64>(blur);
+    
+    // Fast fake shadow: draw multiple rects with decreasing alpha
+    int64: step = 1i64;
+    int64: current_b = b64;
+    while (current_b > 0i64) {
+        // Very simple transparent blend simulation (just darkening)
+        int64: cy = y64 - current_b;
+        while (cy < (y64 + h64 + current_b)) {
+            int64: cx = x64 - current_b;
+            while (cx < (x64 + w64 + current_b)) {
+                drop put_pixel(ctx, cx, cy, color); // We should blend, but for now just solid
+                cx = cx + 1i64;
+            }
+            cy = cy + 1i64;
+        }
+        current_b = current_b - 1i64;
+    }
+    pass NIL;
+};
+
+pub func:software_draw_linear_gradient = NIL(SoftwareContext->:ctx, int32: x, int32: y, int32: width, int32: height, uint32: start_color, uint32: end_color) {
+    int64: x64 = cast_unchecked<int64>(x);
+    int64: y64 = cast_unchecked<int64>(y);
+    int64: w64 = cast_unchecked<int64>(width);
+    int64: h64 = cast_unchecked<int64>(height);
+    
+    // Extract RGBA from start and end
+    int64: sr = cast_unchecked<int64>((start_color >> 24u32) & 255u32);
+    int64: sg = cast_unchecked<int64>((start_color >> 16u32) & 255u32);
+    int64: sb = cast_unchecked<int64>((start_color >> 8u32) & 255u32);
+    
+    int64: er = cast_unchecked<int64>((end_color >> 24u32) & 255u32);
+    int64: eg = cast_unchecked<int64>((end_color >> 16u32) & 255u32);
+    int64: eb = cast_unchecked<int64>((end_color >> 8u32) & 255u32);
+
+    int64: cy = y64;
+    while (cy < (y64 + h64)) {
+        // Interpolate color based on y
+        int64: t = ((cy - y64) * 256i64) / h64;
+        int64: r = sr + (((er - sr) * t) / 256i64);
+        int64: g = sg + (((eg - sg) * t) / 256i64);
+        int64: b = sb + (((eb - sb) * t) / 256i64);
+        
+        uint32: current_color = cast_unchecked<uint32>((r << 24i64) | (g << 16i64) | (b << 8i64) | 255i64);
+
+        int64: cx = x64;
+        while (cx < (x64 + w64)) {
+            drop put_pixel(ctx, cx, cy, current_color);
+            cx = cx + 1i64;
+        }
+        cy = cy + 1i64;
+    }
+    pass NIL;
+};

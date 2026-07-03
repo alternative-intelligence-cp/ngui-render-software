@@ -1,0 +1,7 @@
+[project]
+name = "ngui-render-software"
+version = "0.1.0"
+description = "Pure-Nitpick software rasterizer for NGUI"
+authors = ["Alternative Intelligence CP"]
+
+[dependencies]
